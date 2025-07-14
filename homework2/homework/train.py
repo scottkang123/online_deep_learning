@@ -46,6 +46,8 @@ def train(
     # create loss function and optimizer
     loss_func = ClassificationLoss()
     # optimizer = ...
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
 
     global_step = 0
     metrics = {"train_acc": [], "val_acc": []}
@@ -62,7 +64,18 @@ def train(
             img, label = img.to(device), label.to(device)
 
             # TODO: implement training step
-            raise NotImplementedError("Training step not implemented")
+            optimizer.zero_grad()
+            logits = model(img)
+            loss = loss_func(logits, label)
+            loss.backward()
+            optimizer.step()
+
+            preds = torch.argmax(logits, dim=1)
+            acc = (preds == label).float().mean().item()
+            metrics["train_acc"].append(acc)
+
+            logger.add_scalar("train/loss", loss.item(), global_step)
+            logger.add_scalar("train/acc", acc, global_step)
 
             global_step += 1
 
@@ -74,13 +87,17 @@ def train(
                 img, label = img.to(device), label.to(device)
 
                 # TODO: compute validation accuracy
-                raise NotImplementedError("Validation accuracy not implemented")
+                logits = model(img)
+                preds = torch.argmax(logits, dim=1)
+                acc = (preds == label).float().mean().item()
+                metrics["val_acc"].append(acc)
 
         # log average train and val accuracy to tensorboard
         epoch_train_acc = torch.as_tensor(metrics["train_acc"]).mean()
         epoch_val_acc = torch.as_tensor(metrics["val_acc"]).mean()
 
-        raise NotImplementedError("Logging not implemented")
+        logger.add_scalar("epoch/train_acc", epoch_train_acc, epoch)
+        logger.add_scalar("epoch/val_acc", epoch_val_acc, epoch)
 
         # print on first, last, every 10th epoch
         if epoch == 0 or epoch == num_epoch - 1 or (epoch + 1) % 10 == 0:
