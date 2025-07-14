@@ -13,9 +13,9 @@ from .utils import load_data
 def train(
     exp_dir: str = "logs",
     model_name: str = "linear",
-    num_epoch: int = 50,
-    lr: float = 1e-3,
-    batch_size: int = 128,
+    num_epoch: int = 20,
+    lr: float = 2e-4,
+    batch_size: int = 256,
     seed: int = 2024,
     **kwargs,
 ):
@@ -47,8 +47,6 @@ def train(
     loss_func = ClassificationLoss()
     # optimizer = ...
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-
-
     global_step = 0
     metrics = {"train_acc": [], "val_acc": []}
 
@@ -107,6 +105,7 @@ def train(
                 f"val_acc={epoch_val_acc:.4f}"
             )
 
+
     # save and overwrite the model in the root directory for grading
     save_model(model)
 
@@ -120,8 +119,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--exp_dir", type=str, default="logs")
     parser.add_argument("--model_name", type=str, required=True)
-    parser.add_argument("--num_epoch", type=int, default=50)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--num_epoch", type=int, default=20)
+    parser.add_argument("--lr", type=float, default=2e-4)
     parser.add_argument("--seed", type=int, default=2024)
 
     # optional: additional model hyperparamters

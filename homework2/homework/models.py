@@ -116,10 +116,10 @@ class MLPClassifierDeep(nn.Module):
         """
         super().__init__()
         input_dim = 3 * h * w
-        hidden_dim = 128
-        num_layers = 4
+        hidden_dim = 170
+        num_layers = 16
 
-        layers = [nn.Linear(input_dim, hidden_dim), nn.ReLU()]
+        layers = [nn.Linear(input_dim, hidden_dim), nn.GELU()]
         for _ in range(num_layers - 2):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
@@ -158,8 +158,8 @@ class MLPClassifierDeepResidual(nn.Module):
         """
         super().__init__()
         input_dim = 3 * h * w
-        hidden_dim = 128
-        num_layers = 4  # 1 input, 2 residual blocks, 1 output
+        hidden_dim = 180
+        num_layers = 7  # 1 input, 2 residual blocks, 1 output
 
         self.input_layer = nn.Linear(input_dim, hidden_dim)
 
