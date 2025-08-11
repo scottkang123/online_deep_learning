@@ -41,6 +41,8 @@ class SuperTuxDataset(Dataset):
                     # TODO: fix
                     # transforms.ColorJitter(0.9, 0.9, 0.9, 0.1),
                     transforms.RandomHorizontalFlip(),
+                    transforms.RandomCrop(64, padding=4),
+                    transforms.ColorJitter(0.3, 0.3, 0.3, 0.1),
                     transforms.ToTensor(),
                 ]
             )
