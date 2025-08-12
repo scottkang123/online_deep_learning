@@ -132,6 +132,12 @@ def boundary_penalty_anchor(pred, track_left, track_right, mask, lam=0.05):
     num = m.sum().clamp_min(1.0)
     return lam * ((x - x_clamped).abs() * m).sum() / num
 
+def speed_match(pred, target, mask, lam=0.2):
+    dz_p = pred[:,1:,1] - pred[:,:-1,1]
+    dz_t = target[:,1:,1] - target[:,:-1,1]
+    m = (mask[:,1:] & mask[:,:-1]).float()
+    num = m.sum().clamp_min(1.0)
+    return lam * (((dz_p - dz_t)**2) * m).sum() / num
 
 def train(
     exp_dir: str = "logs",
@@ -197,10 +203,12 @@ def train(
                 pred = model(image=imgs)
 
                 # losses: no boundary term required (you *can* add it since default has tracks)
-                base   = masked_l1_weighted(pred, waypoints, waypoints_mask, w_lat=1.0, w_lon=3.0)
+                bound  = boundary_penalty_anchor(pred, batch["track_left"].to(device), batch["track_right"].to(device), waypoints_mask, lam=0.05)
+                base   = masked_l1_weighted(pred, waypoints, waypoints_mask, w_lat=1.0, w_lon=6.0)
                 smooth = lateral_smoothness(pred, waypoints_mask, lam=0.05)
-                zmono  = z_monotonicity(pred, waypoints_mask, lam=0.05)  # optional if you used softplus+cumsum in forward
-                loss   = base + smooth + zmono
+                zmono  = z_monotonicity(pred, waypoints_mask, lam=0.05)
+                smatch = speed_match(pred, waypoints, waypoints_mask, lam=0.3)
+                loss   = base + smooth + zmono + smatch + bound
 
             else:
                 track_left  = batch["track_left"].to(device)
@@ -251,11 +259,12 @@ def train(
                     waypoints_mask = batch["waypoints_mask"].to(device)
 
                     pred = model(image=imgs)
-
-                    base   = masked_l1_weighted(pred, waypoints, waypoints_mask, w_lat=1.0, w_lon=3.0)
+                    bound  = boundary_penalty_anchor(pred, batch["track_left"].to(device), batch["track_right"].to(device), waypoints_mask, lam=0.05)
+                    base   = masked_l1_weighted(pred, waypoints, waypoints_mask, w_lat=1.0, w_lon=6.0)
                     smooth = lateral_smoothness(pred, waypoints_mask, lam=0.05)
                     zmono  = z_monotonicity(pred, waypoints_mask, lam=0.05)
-                    loss   = base + smooth + zmono
+                    smatch = speed_match(pred, waypoints, waypoints_mask, lam=0.3)
+                    loss   = base + smooth + zmono + smatch + bound
 
                 else:
                     track_left  = batch["track_left"].to(device)

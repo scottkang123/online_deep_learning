@@ -257,15 +257,40 @@ class CNNPlanner(torch.nn.Module):
         self.n_waypoints = n_waypoints
 
         self.register_buffer("input_mean", torch.as_tensor(INPUT_MEAN), persistent=False)
-        self.register_buffer("input_std", torch.as_tensor(INPUT_STD), persistent=False)
+        self.register_buffer("input_std",  torch.as_tensor(INPUT_STD),  persistent=False)
+
+        def block(cin, cout, k=3, s=2, p=1):
+            return nn.Sequential(
+                nn.Conv2d(cin, cout, k, stride=s, padding=p, bias=False),
+                nn.BatchNorm2d(cout),
+                nn.ReLU(inplace=True),
+            )
 
         self.backbone = nn.Sequential(
-            nn.Conv2d(3, 32, 5, stride=2, padding=2), nn.ReLU(inplace=True),
-            nn.Conv2d(32, 64, 3, stride=2, padding=1), nn.ReLU(inplace=True),
-            nn.Conv2d(64, 128, 3, stride=2, padding=1), nn.ReLU(inplace=True),
-            nn.AdaptiveAvgPool2d(1),
+            block(3, 32, k=5, s=2, p=2),   # 96x128 -> 48x64
+            block(32, 64, s=2),            # 48x64  -> 24x32
+            block(64, 128, s=2),           # 24x32  -> 12x16
+            block(128, 256, s=2),          # 12x16  -> 6x8
+            nn.AdaptiveAvgPool2d(1),       # -> (B,256,1,1)
         )
-        self.head = nn.Linear(128, n_waypoints * 2)
+
+        self.head = nn.Sequential(
+            nn.Flatten(1),
+            nn.Linear(256, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(256, n_waypoints * 2),
+        )
+
+        with torch.no_grad():
+          last = self.head[-1]                # nn.Linear(256, n_wp*2)
+          last.bias.zero_()
+          for i in range(self.n_waypoints):
+              last.bias[2*i + 1] = 3.0 * (i + 1)   # e.g., 2m, 4m, 6m
+
+        # Help z be the right scale and monotonic
+        self.z_scale = nn.Parameter(torch.tensor(2.0))   # learned positive-ish scale
+        self.z_bias  = nn.Parameter(torch.tensor(0.5))   # starting offset
 
     def forward(self, image: torch.Tensor, **kwargs) -> torch.Tensor:
         """
@@ -276,14 +301,13 @@ class CNNPlanner(torch.nn.Module):
             torch.FloatTensor: future waypoints with shape (b, n, 2)
         """
         x = (image - self.input_mean[None,:,None,None]) / self.input_std[None,:,None,None]
-        x = self.backbone(x).flatten(1)           # (B,128)
-        out = self.head(x).view(-1, self.n_waypoints, 2)  # (B,n,2)
-
-        x_abs      = out[..., 0]                      # predict absolute x
-        z_delta_sp = torch.nn.functional.softplus(out[..., 1])  # positive deltas
-        z_abs      = torch.cumsum(z_delta_sp, dim=1)  # monotonic forward
-
-        return torch.stack([x_abs, z_abs], dim=-1)    # (B,n,2)
+        x = self.backbone(x)
+        out = self.head(x).view(-1, self.n_waypoints, 2)
+        x_abs = out[..., 0]
+        raw   = out[..., 1]
+        dz    = torch.nn.functional.softplus(raw) + 0.30   # <-- floor ~30 cm per step
+        z_abs = torch.cumsum(dz, dim=1)
+        return torch.stack([x_abs, z_abs], dim=-1)
 
 
 MODEL_FACTORY = {
